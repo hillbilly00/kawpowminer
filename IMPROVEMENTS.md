@@ -7,24 +7,26 @@ This branch tracks proposed improvements to the forked kawpowminer (from RavenCo
 ### 1. Eliminate duplicate shares
 On nodes/pools that re-issue the same work under a new job ID after an accepted share, the current miner restarts nonce search from a low startNonce, causing ~11% refused shares (observed on Quai KawPoW nodes).
 
-**Proposed change in `libethash-cuda/CUDAMiner.cpp` (workLoop / search):**
+**Ready-to-apply change in `libethash-cuda/CUDAMiner.cpp`:**
 
-When a new WorkPackage arrives, randomize the starting nonce instead of always using `w.startNonce`:
+1. Add `#include <random>` near the top of the file.
+2. In `CUDAMiner::workLoop()`, replace the call to `search(...)` with the following:
 
 ```cpp
-// In workLoop(), before calling search():
-uint64_t randomized_start = w.startNonce;
-if (w.jobChanged || /* detect new job */) {
-    // Use a random 64-bit offset so we don't re-search the same nonce space
-    std::random_device rd;
-    std::mt19937_64 gen(rd());
-    std::uniform_int_distribution<uint64_t> dis;
-    randomized_start = dis(gen);
-}
-search(current.header.data(), upper64OfBoundary, randomized_start, w);
+// Randomize starting nonce on every new job to avoid duplicate shares
+// when pools/nodes re-issue the same work under a new job ID.
+uint64_t start_nonce = current.startNonce;
+static thread_local std::mt19937_64 rng{std::random_device{}()};
+std::uniform_int_distribution<uint64_t> dist;
+start_nonce = dist(rng);
+
+// Eventually start searching
+search(current.header.data(), upper64OfBoundary, start_nonce, w);
 ```
 
-Also track recently submitted nonces per header/job to skip them. This matches the approach used by the Rust quai-kawpow-miner which reports zero refused shares on the same workload.
+A unified diff is also available in `patches/nonce-randomization.patch`.
+
+This matches the approach used by the Rust quai-kawpow-miner which reports zero refused shares on the same workload.
 
 ### 2. CPU verification of every share
 Before submitting a share, verify it on the CPU using the same ProgPoW/KawPoW implementation. Discard GPU bugs instead of sending them.
