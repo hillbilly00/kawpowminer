@@ -1,0 +1,25 @@
+--- a/libethash-cl/CLMiner.cpp
++++ b/libethash-cl/CLMiner.cpp
+@@ -1,6 +1,7 @@
+ /// OpenCL miner implementation.
+ ///
+ /// @file
+ /// @copyright GNU General Public License
+ 
++#include <random>
+ #include <boost/dll.hpp>
+ 
+ #include <libethcore/Farm.h>
+@@ -220,7 +221,12 @@ void CLMiner::workLoop()
+                 const uint64_t target = (uint64_t)(u64)((u256)next.get_boundary() >> 192);
+                 assert(target > 0);
+ 
+-                startNonce = next.startNonce;
++                // Randomize starting nonce on every new job to avoid duplicate shares
++                // when pools/nodes re-issue the same work under a new job ID.
++                static thread_local std::mt19937_64 rng{std::random_device{}()};
++                std::uniform_int_distribution<uint64_t> dist;
++                startNonce = dist(rng);
+ 
+                 // Update header constant buffer.
+                 m_queue.enqueueWriteBuffer(m_header, CL_FALSE, 0, 32, next.header.data());
