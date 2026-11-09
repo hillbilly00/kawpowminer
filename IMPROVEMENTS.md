@@ -7,29 +7,52 @@ This branch tracks proposed improvements to the forked kawpowminer (from RavenCo
 ### 1. Eliminate duplicate shares
 On nodes/pools that re-issue the same work under a new job ID after an accepted share, the current miner restarts nonce search from a low startNonce, causing ~11% refused shares (observed on Quai KawPoW nodes).
 
-**Ready-to-apply change in `libethash-cuda/CUDAMiner.cpp`:**
+**CUDA:** See `patches/nonce-randomization.patch` and the code snippet below.
 
-1. Add `#include <random>` near the top of the file.
-2. In `CUDAMiner::workLoop()`, replace the call to `search(...)` with the following:
+**OpenCL:** See `patches/opencl-nonce-randomization.patch`.
+
+Ready-to-apply change in `libethash-cuda/CUDAMiner.cpp` (workLoop):
 
 ```cpp
 // Randomize starting nonce on every new job to avoid duplicate shares
-// when pools/nodes re-issue the same work under a new job ID.
 uint64_t start_nonce = current.startNonce;
 static thread_local std::mt19937_64 rng{std::random_device{}()};
 std::uniform_int_distribution<uint64_t> dist;
 start_nonce = dist(rng);
 
-// Eventually start searching
 search(current.header.data(), upper64OfBoundary, start_nonce, w);
 ```
 
-A unified diff is also available in `patches/nonce-randomization.patch`.
+Equivalent change in `libethash-cl/CLMiner.cpp` (when header changes):
+
+```cpp
+static thread_local std::mt19937_64 rng{std::random_device{}()};
+std::uniform_int_distribution<uint64_t> dist;
+startNonce = dist(rng);
+```
 
 This matches the approach used by the Rust quai-kawpow-miner which reports zero refused shares on the same workload.
 
 ### 2. CPU verification of every share
-Before submitting a share, verify it on the CPU using the same ProgPoW/KawPoW implementation. Discard GPU bugs instead of sending them.
+Before calling `Farm::f().submitProof(...)` (in both CUDAMiner::search and CLMiner::workLoop), verify the solution on the CPU.
+
+Sketch (requires linking against the ethash/ProgPoW CPU implementation already present in the tree):
+
+```cpp
+// Pseudocode — place just before submitProof
+ethash::result cpu_result = ethash::hash(
+    *m_epochContext.light, 
+    header, 
+    nonce
+);
+if (cpu_result.final_hash > boundary) {
+    // discard — GPU produced invalid share
+    continue;
+}
+// only then submitProof
+```
+
+Exact integration depends on the current ethash API surface in `libethash`. The goal is to drop any GPU-generated solution that fails CPU verification instead of sending it to the pool.
 
 ### 3. Modern CUDA architecture support
 Update NVRTC flags and device detection for compute capability 8.0+ (Ampere) and 8.9/9.0 (Ada). Improve defaults for RTX 30/40 series and LHR cards.
