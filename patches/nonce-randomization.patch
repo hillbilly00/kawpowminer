@@ -1,0 +1,30 @@
+--- a/libethash-cuda/CUDAMiner.cpp
++++ b/libethash-cuda/CUDAMiner.cpp
+@@ -1,6 +1,7 @@
+ /*
+ This file is part of kawpowminer.
+ 
++#include <random>
+ kawpowminer is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+@@ -280,7 +281,18 @@ void CUDAMiner::workLoop()
+             // Persist most recent job.
+             // Job's differences should be handled at higher level
+             current = w;
+             uint64_t upper64OfBoundary = (uint64_t)(u64)((u256)w.get_boundary() >> 192);
+ 
+-            // Eventually start searching
+-            search(current.header.data(), upper64OfBoundary, current.startNonce, w);
++            // Randomize starting nonce on every new job to avoid duplicate shares
++            // when pools/nodes re-issue the same work under a new job ID.
++            uint64_t start_nonce = current.startNonce;
++            static thread_local std::mt19937_64 rng{std::random_device{}()};
++            std::uniform_int_distribution<uint64_t> dist;
++            start_nonce = dist(rng);
++
++            // Eventually start searching
++            search(current.header.data(), upper64OfBoundary, start_nonce, w);
+         }
+ 
+         // Reset miner and stop working
