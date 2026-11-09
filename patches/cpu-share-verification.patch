@@ -1,0 +1,64 @@
+--- a/libethash-cuda/CUDAMiner.cpp
++++ b/libethash-cuda/CUDAMiner.cpp
+@@ -1,6 +1,7 @@
+ /*
+ This file is part of kawpowminer.
+ 
++#include <ethash/progpow.hpp>
+ kawpowminer is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+@@ -420,6 +421,22 @@ void CUDAMiner::search(
+                     h256 mixHashes[MAX_SEARCH_RESULTS];
+ 
+ 
++                    // CPU verification before submit (sketch — adjust to actual Solution construction)
++                    // Requires access to the epoch context and boundary.
++                    // Place this just before Farm::f().submitProof(...) in the results loop.
++                    /*
++                    ethash::hash256 header_hash;
++                    std::memcpy(header_hash.bytes, header, 32);
++                    auto cpu_result = progpow::hash(*m_epochContext.light, (int)w.block, header_hash, nonce);
++                    ethash::hash256 boundary_hash;
++                    // convert boundary to hash256 as needed
++                    if (!progpow::verify(*m_epochContext.light, (int)w.block, header_hash,
++                                         cpu_result.mix_hash, nonce, boundary_hash)) {
++                        cudalog << "Discarded invalid GPU share (CPU verify failed)";
++                        continue;
++                    }
++                    */
++
+                     // existing submit logic follows
+                     Farm::f().submitProof(Solution{
+                         nonce, mix, w, std::chrono::steady_clock::now(), m_index});
+
+--- a/libethash-cl/CLMiner.cpp
++++ b/libethash-cl/CLMiner.cpp
+@@ -1,6 +1,7 @@
+ /// OpenCL miner implementation.
+ ///
+ /// @file
+ /// @copyright GNU General Public License
+ 
++#include <ethash/progpow.hpp>
+ #include <boost/dll.hpp>
+ 
+@@ -280,6 +281,20 @@ void CLMiner::workLoop()
+                     uint64_t nonce = current.startNonce + results.rslt[i].gid;
+                     h256 mix;
+                     memcpy(mix.data(), (char*)results.rslt[i].mix, sizeof(results.rslt[i].mix));
+ 
++                    // CPU verification sketch (same as CUDA path)
++                    /*
++                    ethash::hash256 header_hash;
++                    std::memcpy(header_hash.bytes, current.header.data(), 32);
++                    auto cpu_result = progpow::hash(*m_epochContext.light, (int)current.block, header_hash, nonce);
++                    if (!progpow::verify(...)) {
++                        cllog << "Discarded invalid GPU share (CPU verify failed)";
++                        continue;
++                    }
++                    */
++
+                     Farm::f().submitProof(Solution{
+                         nonce, mix, current, std::chrono::steady_clock::now(), m_index});
+ 
