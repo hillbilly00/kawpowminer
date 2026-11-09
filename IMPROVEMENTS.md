@@ -36,23 +36,11 @@ This matches the approach used by the Rust quai-kawpow-miner which reports zero 
 ### 2. CPU verification of every share
 Before calling `Farm::f().submitProof(...)` (in both CUDAMiner::search and CLMiner::workLoop), verify the solution on the CPU.
 
-Sketch (requires linking against the ethash/ProgPoW CPU implementation already present in the tree):
+Full patch sketch: `patches/cpu-share-verification.patch`
 
-```cpp
-// Pseudocode — place just before submitProof
-ethash::result cpu_result = ethash::hash(
-    *m_epochContext.light, 
-    header, 
-    nonce
-);
-if (cpu_result.final_hash > boundary) {
-    // discard — GPU produced invalid share
-    continue;
-}
-// only then submitProof
-```
+It uses the existing `progpow::hash` / `progpow::verify` API (from the ethash/ProgPoW library already in the tree) to discard any GPU solution that fails CPU verification. The Farm already has a `noEval` flag that can optionally skip this check.
 
-Exact integration depends on the current ethash API surface in `libethash`. The goal is to drop any GPU-generated solution that fails CPU verification instead of sending it to the pool.
+The patch is intentionally a sketch (commented blocks) so the exact boundary conversion and epoch-context access can be adjusted to the current code. The goal is to drop invalid shares instead of sending them to the pool.
 
 ### 3. Modern CUDA architecture support
 Update NVRTC flags and device detection for compute capability 8.0+ (Ampere) and 8.9/9.0 (Ada). Improve defaults for RTX 30/40 series and LHR cards.
