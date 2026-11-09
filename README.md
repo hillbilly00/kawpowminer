@@ -2,7 +2,16 @@
 
 > kawpow miner with OpenCL, CUDA and stratum support
 
-**kawpowminer** is an ProgPoW GPU mining worker: with kawpowminer you can mine Ravencoin, which relies on an ProgPoW-based Proof of Work thus including Ethereum ProgPoW and others. This is the actively maintained version of kawpowminer. It originates from the [ethminer](https://github.com/ethereum-mining/ethminer) project. Check the original [ProgPoW](https://github.com/ifdefelse/progpow) implementation and [EIP-1057](https://eips.ethereum.org/EIPS/eip-1057) for specification.
+**kawpowminer** is an ProgPoW GPU mining worker: with kawpowminer you can mine Ravencoin, which relies on an ProgPoW-based Proof of Work thus including Ethereum ProgPoW and others. This is a maintained fork of the original RavenCommunity/kawpowminer (last upstream release ~1.2.4). It originates from the [ethminer](https://github.com/ethereum-mining/ethminer) project. Check the original [ProgPoW](https://github.com/ifdefelse/progpow) implementation and [EIP-1057](https://eips.ethereum.org/EIPS/eip-1057) for specification.
+
+## Status of this fork (hillbilly00)
+
+Active improvements are tracked on the `improve-nonce-randomization` branch. See [IMPROVEMENTS.md](IMPROVEMENTS.md) for the current draft plan.
+
+**Key fixes in progress:**
+- Randomize starting nonce on new jobs to eliminate duplicate-share refusals (~11% on some nodes/pools that re-issue the same work under a new job ID).
+- CPU verification of shares before submission.
+- Better support for modern NVIDIA architectures (Ampere / Ada).
 
 ## Features
 
@@ -156,6 +165,7 @@ Ordered alphabetically. [Contributors statistics since 2015-08-20].
 | ifdefelse             | [@ifdefelse](https://github.com/ifdefelse)                   |     |
 | Won-Kyu Park          | [@hackmod](https://github.com/hackmod)                       | ETH: 0x89307cb2fa6b9c571ab0d7408ab191a2fbefae0a |
 | Ikmyeong Na           | [@naikmyeong](https://github.com/naikmyeong)                 |     |
+| hillbilly00           | [@hillbilly00](https://github.com/hillbilly00)               | Fork maintainer |
 
 
 ## Contribute
