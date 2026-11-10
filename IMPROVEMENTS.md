@@ -101,6 +101,33 @@ If you still want to build this C++ fork:
 
 After applying the nonce-randomization patches, rebuild and test share acceptance on your target pool/node before relying on it for production.
 
+## Replacing Hunter
+
+Hunter is the main source of build pain on modern Ubuntu. Here are the practical options, from least to most effort:
+
+### Option A — Disable Hunter and use system packages (quickest)
+```bash
+cmake .. -DHUNTER_ENABLED=OFF -DETHASHCUDA=ON -DETHASHCL=ON
+```
+Then install the needed packages with apt (`libboost-all-dev`, `libjsoncpp-dev`, etc.). This is the approach documented in the original ethminer build notes and works well once the NVRTC path fix is also applied.
+
+### Option B — XMR / XMRig-style deps script (recommended for rigs)
+Many Monero/XMRig setups use a `build_deps.sh` script that downloads and builds specific library versions into a local `deps/` folder. The main build then points CMake at that folder. This gives the same “update the script, then compile” workflow you’re used to.
+
+A starter script is provided at `scripts/build_deps.sh`. After running it you can configure with:
+```bash
+cmake .. -DHUNTER_ENABLED=OFF -DCMAKE_PREFIX_PATH=../deps
+```
+(or set the prefix path inside CMakeLists.txt). The script currently focuses on ethash/progpow and notes where Boost/jsoncpp can be added.
+
+### Option C — Migrate to CMake FetchContent (clean long-term)
+Replace `hunter_add_package(...)` calls with native CMake `FetchContent_Declare` / `FetchContent_MakeAvailable`. This is the modern recommended approach and works cleanly on Ubuntu 24.04+ without external package managers.
+
+### Option D — Update Hunter itself (not recommended)
+The original `ruslo/hunter` repo is archived. A community fork exists at `cpp-pm/hunter`, but continuing to fight an outdated system is usually not worth it compared with A–C.
+
+**Practical recommendation for this fork:** Start with Option A (disable Hunter + system packages + NVRTC fix). If you want the XMR-style control, use Option B and extend `scripts/build_deps.sh`.
+
 ## Longer-term
 - Prometheus metrics and better API stats
 - Optional systemd service example
