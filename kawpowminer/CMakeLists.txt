@@ -13,10 +13,13 @@ if(MSVC)
 	target_sources(${EXECUTABLE} PRIVATE kawpowminer.rc)
 endif()
 
-hunter_add_package(CLI11)
-find_package(CLI11 CONFIG REQUIRED)
+# CLI11 is used as a single header (v1.9.x) placed in deps/include/CLI/CLI.hpp
+# Hunter / find_package disabled for modern Ubuntu builds without Hunter.
+# hunter_add_package(CLI11)
+# find_package(CLI11 CONFIG REQUIRED)
+include_directories(${CMAKE_SOURCE_DIR}/deps/include)
 
-target_link_libraries(kawpowminer PRIVATE ethcore poolprotocols devcore kawpowminer-buildinfo CLI11::CLI11 Boost::filesystem Boost::system)
+target_link_libraries(kawpowminer PRIVATE ethcore poolprotocols devcore kawpowminer-buildinfo Boost::filesystem Boost::system)
 
 if(ETHDBUS)
 	find_package(PkgConfig)
