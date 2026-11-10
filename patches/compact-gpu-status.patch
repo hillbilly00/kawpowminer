@@ -1,0 +1,41 @@
+From: hillbilly00 <39257598+hillbilly00@users.noreply.github.com>
+Date: Mon, 09 Nov 2026
+Subject: [PATCH] Compact per-GPU status line as default console output
+
+Sketch of a more readable per-GPU status line.
+The exact insertion point is in the main mining progress logging
+(typically MinerCLI or Farm display loop). Adjust variable names
+and sensor access to match the current codebase.
+
+--- a/kawpowminer/MinerCLI.cpp (or equivalent progress display location)
++++ b/kawpowminer/MinerCLI.cpp
+@@ -xxx,xx +xxx,xx @@
+ // After existing hashrate / solution stats collection:
+ 
+ // Compact per-GPU status (make this the default or lower-verbosity path)
+ if (f.getMiners().size() > 0)
+ {
+     for (size_t i = 0; i < f.getMiners().size(); ++i)
+     {
+         auto& miner = f.getMiners()[i];
+         auto hr = miner.hashRate();          // or from WorkingProgress
+         auto temp = miner.temperature();     // if available via hwmon
+         auto fan  = miner.fanPercent();
+         auto power = miner.power();
+         auto accepts = solstats.getAccepts(i);
+         auto rejects = solstats.getRejects(i);
+ 
+         minelog << "GPU" << i
+                 << " " << std::fixed << std::setprecision(1) << (hr / 1e6) << " MH/s"
+                 << "  " << temp << "C"
+                 << "  " << fan << "%"
+                 << "  " << power << "W"
+                 << "  A:" << accepts << " R:" << rejects
+                 << std::endl;
+     }
+ }
+ else
+ {
+     // Fallback to existing single-line progress output
+     minelog << mp << ' ' << solstats << ' ' << f.farmLaunchedFormatted();
+ }
