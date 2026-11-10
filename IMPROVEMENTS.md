@@ -2,6 +2,43 @@
 
 This branch tracks proposed improvements to the forked kawpowminer (from RavenCommunity/kawpowminer ~1.2.4).
 
+## Verified Ubuntu OpenCL Build (22.04+)
+
+The following steps produce a working OpenCL binary on Ubuntu 22.04 after a fresh clone of this branch. Tested November 2026.
+
+```bash
+git clone -b improve-nonce-randomization --recursive https://github.com/hillbilly00/kawpowminer.git
+cd kawpowminer
+
+# System packages
+sudo apt update
+sudo apt install build-essential cmake git libboost-all-dev libjsoncpp-dev ocl-icd-opencl-dev
+
+# jsoncpp header location fix (Ubuntu puts it under jsoncpp/)
+sudo ln -sf /usr/include/jsoncpp/json /usr/include/json
+
+# Build compatible ethash + CLI11 into deps/
+chmod +x scripts/build_deps.sh
+./scripts/build_deps.sh
+
+# Configure and build (OpenCL only; CUDA disabled)
+mkdir -p build && cd build
+cmake .. -DHUNTER_ENABLED=OFF -DCMAKE_PREFIX_PATH=../deps -DETHASHCUDA=OFF -DETHASHCL=ON
+make -j$(nproc)
+```
+
+Binary: `build/kawpowminer/kawpowminer`
+
+### Notes from the successful build
+- Hunter is disabled.
+- ethash v0.6.0 is used (provides `progpow.hpp` and the expected API).
+- CLI11 v1.9.1 single header is placed at `deps/include/CLI/CLI.hpp`.
+- `jsoncpp_lib_static` was changed to system `jsoncpp` in `libpoolprotocols/CMakeLists.txt`.
+- `find_package(CLI11)` and `CLI11::CLI11` link were removed; the header-only include is used instead.
+- Boost placeholders (`_1`) require `using namespace boost::placeholders;` on modern Boost (already noted for EthGetworkClient.cpp).
+
+OpenCL runtime (AMD) is still required at runtime (`amdgpu-pro` OpenCL, ROCm, or Mesa). `clinfo` must show a platform before the miner will detect GPUs.
+
 ## High-Priority Fixes
 
 ### 1. Eliminate duplicate shares
@@ -38,121 +75,29 @@ Before calling `Farm::f().submitProof(...)` (in both CUDAMiner::search and CLMin
 
 Full patch sketch: `patches/cpu-share-verification.patch`
 
-It uses the existing `progpow::hash` / `progpow::verify` API (from the ethash/ProgPoW library already in the tree) to discard any GPU solution that fails CPU verification. The Farm already has a `noEval` flag that can optionally skip this check.
-
-The patch is intentionally a sketch (commented blocks) so the exact boundary conversion and epoch-context access can be adjusted to the current code. The goal is to drop invalid shares instead of sending them to the pool.
-
 ### 3. Modern CUDA architecture support
-Update NVRTC flags and device detection for compute capability 8.0+ (Ampere) and 8.9/9.0 (Ada). Improve defaults for RTX 30/40 series and LHR cards.
+Update NVRTC flags and device detection for compute capability 8.0+ (Ampere) and 8.9/9.0 (Ada).
 
 ### 4. Build system modernization
-Reduce reliance on outdated Hunter; improve CMake for Ubuntu 22.04+/24.04 and current CUDA toolkits.
-
-## Modern Ubuntu Build Notes (22.04 / 24.04+)
-
-The original 1.2.4-era code does **not** compile cleanly on Ubuntu 24.04 (or later) out of the box. The main blockers are:
-
-- Outdated Hunter package manager (v0.23.214) that often fails to fetch/build dependencies.
-- NVRTC / CUDA library path changes (Ubuntu 20.04+ places libs under `/usr/lib/x86_64-linux-gnu` or versioned CUDA paths).
-- Newer GCC (13+ on 24.04) being stricter than the compilers the code was tested with.
-- Hard-coded older compute capabilities and `find_library` calls that no longer locate `libnvrtc` / `libcuda`.
-
-### Recommended approach
-
-**Most reliable path today:** Use the Rust `quai-kawpow-miner` instead. It only needs the NVIDIA driver + NVRTC at runtime and builds cleanly with a modern Rust toolchain.
-
-If you still want to build this C++ fork:
-
-1. Prefer **Ubuntu 22.04** + CUDA 11.x or 12.x. 24.04 is possible but requires more manual fixes.
-2. Install base packages:
-   ```bash
-   sudo apt update
-   sudo apt install build-essential cmake git libboost-all-dev \
-     ocl-icd-opencl-dev mesa-common-dev \
-     nvidia-driver-XXX cuda-toolkit-XX   # match your card / desired CUDA
-   ```
-3. **NVRTC library workaround** (common failure point). In `libethash-cuda/CMakeLists.txt`, replace the two `find_library` lines with something more permissive:
-   ```cmake
-   # More tolerant lookup for modern Ubuntu / multi-version CUDA
-   find_library(CUDA_nvrtc_LIBRARY NAMES nvrtc
-     PATHS ${CUDA_TOOLKIT_ROOT_DIR} /usr/lib/x86_64-linux-gnu /usr/local/cuda/lib64
-     PATH_SUFFIXES lib64 lib lib/x64 lib64/stubs lib/x64/stubs
-     NO_DEFAULT_PATH)
-   find_library(CUDA_cuda_LIBRARY NAMES cuda
-     PATHS ${CUDA_TOOLKIT_ROOT_DIR} /usr/lib/x86_64-linux-gnu /usr/local/cuda/lib64
-     PATH_SUFFIXES lib64 lib lib/x64 lib64/stubs lib/x64/stubs
-     NO_DEFAULT_PATH)
-   # Fallback if still not found
-   if(NOT CUDA_nvrtc_LIBRARY)
-     find_library(CUDA_nvrtc_LIBRARY NAMES nvrtc)
-   endif()
-   if(NOT CUDA_cuda_LIBRARY)
-     find_library(CUDA_cuda_LIBRARY NAMES cuda)
-   endif()
-   ```
-   Alternatively, some users simply hard-link with `-lnvrtc -lcuda` after ensuring the libs are on the default search path (`ldconfig`).
-
-4. If Hunter fails, try system packages where possible or temporarily disable Hunter packages that already exist on the system (Boost, jsoncpp).
-5. For CUDA 12+ / compute capability 8.6–9.0 cards, you may also want to extend the `-gencode` list in the same `CMakeLists.txt` (add `sm_89`, `sm_90`, etc.).
-
-### Known historical fixes
-- Ubuntu 20.04 NVRTC path issues were discussed in RavenCommunity/kawpowminer PR #37 and related comments.
-- Binary releases existed for Ubuntu 18.04 / 20.04 + CUDA 11, but nothing official for 22.04+ or 24.04.
-
-After applying the nonce-randomization patches, rebuild and test share acceptance on your target pool/node before relying on it for production.
+Reduce reliance on outdated Hunter; improve CMake for Ubuntu 22.04+/24.04 and current CUDA toolkits. See the verified OpenCL recipe above.
 
 ## Replacing Hunter
 
-Hunter is the main source of build pain on modern Ubuntu. Here are the practical options, from least to most effort:
+Hunter is the main source of build pain on modern Ubuntu. The verified path above uses Option B (deps script).
 
-### Option A — Disable Hunter and use system packages (quickest)
-```bash
-cmake .. -DHUNTER_ENABLED=OFF -DETHASHCUDA=ON -DETHASHCL=ON
-```
-Then install the needed packages with apt (`libboost-all-dev`, `libjsoncpp-dev`, etc.). This is the approach documented in the original ethminer build notes and works well once the NVRTC path fix is also applied.
-
-### Option B — XMR / XMRig-style deps script (recommended for rigs)
-Many Monero/XMRig setups use a `build_deps.sh` script that downloads and builds specific library versions into a local `deps/` folder. The main build then points CMake at that folder. This gives the same “update the script, then compile” workflow you’re used to.
-
-A starter script is provided at `scripts/build_deps.sh`. After running it you can configure with:
-```bash
-cmake .. -DHUNTER_ENABLED=OFF -DCMAKE_PREFIX_PATH=../deps
-```
-(or set the prefix path inside CMakeLists.txt). The script currently focuses on ethash/progpow and notes where Boost/jsoncpp can be added.
-
-### Option C — Migrate to CMake FetchContent (clean long-term)
-Replace `hunter_add_package(...)` calls with native CMake `FetchContent_Declare` / `FetchContent_MakeAvailable`. This is the modern recommended approach and works cleanly on Ubuntu 24.04+ without external package managers.
-
-### Option D — Update Hunter itself (not recommended)
-The original `ruslo/hunter` repo is archived. A community fork exists at `cpp-pm/hunter`, but continuing to fight an outdated system is usually not worth it compared with A–C.
-
-**Practical recommendation for this fork:** Start with Option A (disable Hunter + system packages + NVRTC fix). If you want the XMR-style control, use Option B and extend `scripts/build_deps.sh`.
+### Option A — Disable Hunter and use system packages
+### Option B — XMR-style deps script (used in the verified recipe)
+### Option C — CMake FetchContent (long-term)
+### Option D — Update Hunter (not recommended)
 
 ## Console / Output Improvements
 
-The current console output is the classic ethminer-style scrolling log (hashrate every few seconds + share messages). It is functional but noisy and harder to scan than modern miners. Suggested improvements, from easiest to more involved:
-
-### Quick wins
-- **Smoother hashrate** — Average over a longer window or raise the default farm-recheck interval so the displayed number jumps less.
-- **Compact per-GPU status line (new default)** — Show one readable line per GPU with hashrate, temperature, fan, power, and share counts. See `patches/compact-gpu-status.patch` for a concrete sketch.
-- **Better column alignment and consistent color** — Pad numbers and use the existing color macros so the output is easier to scan at a glance.
-
-### Medium improvements
-- **Single updating status line** — Keep one status line that refreshes in place (`\r`) and only log important events (shares, disconnects, epoch changes) as separate lines.
-- **Clearer share feedback** — Distinguish accepted / rejected / failed / stale and show the rejection reason when available.
-- **`--compact` / `--quiet` flag** — Reduce output to the status line plus important events only.
-
-### Larger options
-- Simple ANSI or ncurses TUI table (similar to the optional TUI in quai-kawpow-miner).
-- Prometheus metrics endpoint for multi-rig monitoring.
-- Keep the existing API in sync with the new console fields.
-
-**Recommendation:** Start with the compact per-GPU status line (patch provided). It gives the biggest readability gain for the least code change and stays compatible with the current logging system.
+See `patches/compact-gpu-status.patch` for a sketch of a cleaner per-GPU status line.
 
 ## Longer-term
 - Prometheus metrics and better API stats
 - Optional systemd service example
-- Consider a host-side rewrite in Rust while keeping the CUDA kernels (see quai-kawpow-miner for a working reference)
+- Consider a host-side rewrite in Rust while keeping the CUDA kernels
 
 ---
 Authored / coordinated by hillbilly00
