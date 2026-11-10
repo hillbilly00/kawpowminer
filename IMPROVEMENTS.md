@@ -128,6 +128,27 @@ The original `ruslo/hunter` repo is archived. A community fork exists at `cpp-pm
 
 **Practical recommendation for this fork:** Start with Option A (disable Hunter + system packages + NVRTC fix). If you want the XMR-style control, use Option B and extend `scripts/build_deps.sh`.
 
+## Console / Output Improvements
+
+The current console output is the classic ethminer-style scrolling log (hashrate every few seconds + share messages). It is functional but noisy and harder to scan than modern miners. Suggested improvements, from easiest to more involved:
+
+### Quick wins
+- **Smoother hashrate** — Average over a longer window or raise the default farm-recheck interval so the displayed number jumps less.
+- **Compact per-GPU status line (new default)** — Show one readable line per GPU with hashrate, temperature, fan, power, and share counts. See `patches/compact-gpu-status.patch` for a concrete sketch.
+- **Better column alignment and consistent color** — Pad numbers and use the existing color macros so the output is easier to scan at a glance.
+
+### Medium improvements
+- **Single updating status line** — Keep one status line that refreshes in place (`\r`) and only log important events (shares, disconnects, epoch changes) as separate lines.
+- **Clearer share feedback** — Distinguish accepted / rejected / failed / stale and show the rejection reason when available.
+- **`--compact` / `--quiet` flag** — Reduce output to the status line plus important events only.
+
+### Larger options
+- Simple ANSI or ncurses TUI table (similar to the optional TUI in quai-kawpow-miner).
+- Prometheus metrics endpoint for multi-rig monitoring.
+- Keep the existing API in sync with the new console fields.
+
+**Recommendation:** Start with the compact per-GPU status line (patch provided). It gives the biggest readability gain for the least code change and stays compatible with the current logging system.
+
 ## Longer-term
 - Prometheus metrics and better API stats
 - Optional systemd service example
